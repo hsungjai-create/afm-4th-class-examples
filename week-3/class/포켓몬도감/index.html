@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>포켓몬 도감</title>
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone@7.25.9/babel.min.js"></script>
+  <style>
+    @keyframes popIn {
+      from { opacity: 0; transform: scale(0.92) translateY(8px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    .pop-in { animation: popIn 0.18s ease-out both; }
+    @keyframes overlayFade {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    .overlay-fade { animation: overlayFade 0.18s ease-out both; }
+  </style>
+</head>
+<body class="bg-neutral-100">
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // ========================================
+    // 🎨 Design System Components
+    // ========================================
+
+    function Badge({ children, className = "" }) {
+      return (
+        <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-bold text-white shadow-sm ${className}`}>
+          {children}
+        </span>
+      );
+    }
+
+    function Button({ children, variant = "primary", size = "md", className = "", ...props }) {
+      const variants = {
+        primary: "bg-red-500 text-white hover:bg-red-600 focus-visible:ring-red-400",
+        secondary: "bg-neutral-200 text-neutral-800 hover:bg-neutral-300 focus-visible:ring-neutral-400",
+        ghost: "bg-transparent text-neutral-500 hover:bg-neutral-100 focus-visible:ring-neutral-300",
+      };
+      const sizes = {
+        sm: "px-3 py-1.5 text-sm",
+        md: "px-4 py-2 text-sm",
+        lg: "px-5 py-2.5 text-base",
+      };
+      return (
+        <button
+          className={`rounded-lg font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${variants[variant]} ${sizes[size]} ${className}`}
+          {...props}
+        >
+          {children}
+        </button>
+      );
+    }
+
+    function Card({ children, className = "", ...props }) {
+      return (
+        <div className={`bg-white rounded-2xl shadow-sm ring-1 ring-neutral-200 overflow-hidden ${className}`} {...props}>
+          {children}
+        </div>
+      );
+    }
+
+    function Modal({ isOpen, onClose, title, children }) {
+      useEffect(() => {
+        if (!isOpen) return;
+        const handleKey = (e) => { if (e.key === "Escape") onClose(); };
+        document.addEventListener("keydown", handleKey);
+        return () => document.removeEventListener("keydown", handleKey);
+      }, [isOpen, onClose]);
+
+      if (!isOpen) return null;
+
+      return (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 overlay-fade"
+          onClick={onClose}
+          role="dialog"
+          aria-modal="true"
+          aria-label={title}
+        >
+          <div
+            className="pop-in bg-white rounded-2xl shadow-xl w-full max-w-sm max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-100 sticky top-0 bg-white">
+              <h3 className="text-lg font-bold text-neutral-900">{title}</h3>
+              <button
+                onClick={onClose}
+                aria-label="닫기"
+                className="text-neutral-400 hover:text-neutral-700 rounded-full h-8 w-8 flex items-center justify-center hover:bg-neutral-100"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-5">{children}</div>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🧩 Common/Layout Components
+    // ========================================
+
+    function Header() {
+      return (
+        <header className="bg-red-500 text-white shadow-md">
+          <div className="max-w-4xl mx-auto px-6 py-8 text-center">
+            <div className="inline-flex items-center gap-2 mb-2">
+              <span className="h-5 w-5 rounded-full bg-white ring-4 ring-blue-400/70"></span>
+              <span className="h-3 w-3 rounded-full bg-yellow-300"></span>
+              <span className="h-3 w-3 rounded-full bg-green-400"></span>
+            </div>
+            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight">포켓몬 도감</h1>
+            <p className="mt-2 text-sm text-red-100">카드를 눌러 자세한 정보를 확인해보세요</p>
+          </div>
+        </header>
+      );
+    }
+
+    function Footer() {
+      return (
+        <footer className="py-8 text-center text-xs text-neutral-400">
+          이미지 출처: PokeAPI (raw.githubusercontent.com/PokeAPI/sprites)
+        </footer>
+      );
+    }
+
+    // ========================================
+    // 📄 Page Components
+    // ========================================
+
+    const TYPE_STYLES = {
+      "불꽃": "bg-orange-500",
+      "전기": "bg-yellow-400 text-yellow-950",
+      "물": "bg-blue-500",
+      "풀": "bg-green-500",
+      "독": "bg-purple-500",
+    };
+
+    const POKEMONS = [
+      {
+        id: 4,
+        name: "파이리",
+        englishName: "Charmander",
+        types: ["불꽃"],
+        height: "0.6m",
+        weight: "8.5kg",
+        description: "태어날 때부터 꼬리에 불꽃이 붙어 있다. 이 불꽃이 꺼지면 죽어버린다고 한다.",
+      },
+      {
+        id: 25,
+        name: "피카츄",
+        englishName: "Pikachu",
+        types: ["전기"],
+        height: "0.4m",
+        weight: "6.0kg",
+        description: "양쪽 볼에 있는 주머니에 전기를 저장한다. 화가 나면 저장해둔 전기를 한꺼번에 방출한다.",
+      },
+      {
+        id: 7,
+        name: "꼬부기",
+        englishName: "Squirtle",
+        types: ["물"],
+        height: "0.5m",
+        weight: "9.0kg",
+        description: "등딱지 속에 몸을 숨기고 물을 세차게 뿜어내며 정확하게 목표물을 노린다.",
+      },
+      {
+        id: 1,
+        name: "이상해씨",
+        englishName: "Bulbasaur",
+        types: ["풀", "독"],
+        height: "0.7m",
+        weight: "6.9kg",
+        description: "태어날 때부터 등에 이상한 씨앗이 심어져 있어 몸과 함께 조금씩 성장한다.",
+      },
+      {
+        id: 89,
+        name: "또까스",
+        englishName: "Muk",
+        types: ["독"],
+        height: "1.2m",
+        weight: "30.0kg",
+        description: "온몸에서 나는 지독한 냄새 때문에 잠자리채 애벌레조차 도망친다. 지나간 자리는 풀 한 포기 자라지 않는다.",
+      },
+    ];
+
+    function spriteUrl(id) {
+      return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${id}.png`;
+    }
+
+    function artworkUrl(id) {
+      return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${id}.png`;
+    }
+
+    function PokemonCard({ pokemon, onSelect }) {
+      return (
+        <Card
+          className="cursor-pointer transition-transform hover:-translate-y-1 hover:shadow-md"
+          role="button"
+          tabIndex={0}
+          onClick={() => onSelect(pokemon)}
+          onKeyDown={(e) => { if (e.key === "Enter") onSelect(pokemon); }}
+        >
+          <div className="bg-neutral-50 flex items-center justify-center h-36">
+            <img
+              src={spriteUrl(pokemon.id)}
+              alt={pokemon.name}
+              className="h-28 w-28 object-contain image-render-pixel"
+              loading="lazy"
+            />
+          </div>
+          <div className="p-4">
+            <p className="text-xs text-neutral-400 font-mono">No. {String(pokemon.id).padStart(3, "0")}</p>
+            <h2 className="text-lg font-bold text-neutral-900">{pokemon.name}</h2>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {pokemon.types.map((type) => (
+                <Badge key={type} className={TYPE_STYLES[type]}>
+                  {type}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        </Card>
+      );
+    }
+
+    function PokemonDetail({ pokemon }) {
+      return (
+        <div>
+          <div className="flex items-center justify-center bg-neutral-50 rounded-xl mb-4">
+            <img
+              src={artworkUrl(pokemon.id)}
+              alt={pokemon.name}
+              className="h-48 w-48 object-contain"
+              loading="lazy"
+            />
+          </div>
+          <p className="text-xs text-neutral-400 font-mono mb-1">No. {String(pokemon.id).padStart(3, "0")} · {pokemon.englishName}</p>
+          <div className="flex flex-wrap gap-1.5 mb-4">
+            {pokemon.types.map((type) => (
+              <Badge key={type} className={TYPE_STYLES[type]}>
+                {type}
+              </Badge>
+            ))}
+          </div>
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <div className="bg-neutral-50 rounded-lg p-3 text-center">
+              <p className="text-xs text-neutral-400">키</p>
+              <p className="font-bold text-neutral-800">{pokemon.height}</p>
+            </div>
+            <div className="bg-neutral-50 rounded-lg p-3 text-center">
+              <p className="text-xs text-neutral-400">몸무게</p>
+              <p className="font-bold text-neutral-800">{pokemon.weight}</p>
+            </div>
+          </div>
+          <p className="text-sm text-neutral-600 leading-relaxed">{pokemon.description}</p>
+        </div>
+      );
+    }
+
+    function HomePage() {
+      const [selected, setSelected] = useState(null);
+
+      return (
+        <main className="max-w-4xl mx-auto px-4 sm:px-6 py-10">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+            {POKEMONS.map((pokemon) => (
+              <PokemonCard key={pokemon.id} pokemon={pokemon} onSelect={setSelected} />
+            ))}
+          </div>
+
+          <Modal
+            isOpen={selected !== null}
+            onClose={() => setSelected(null)}
+            title={selected ? selected.name : ""}
+          >
+            {selected && <PokemonDetail pokemon={selected} />}
+          </Modal>
+        </main>
+      );
+    }
+
+    // ========================================
+    // 🚀 App Component
+    // ========================================
+
+    function App() {
+      return (
+        <div>
+          <Header />
+          <HomePage />
+          <Footer />
+        </div>
+      );
+    }
+
+    // ========================================
+    // Rendering
+    // ========================================
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
